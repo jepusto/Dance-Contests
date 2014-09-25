@@ -1,0 +1,63 @@
+---
+title: "ILHC Judging clusters"
+author: "James E. Pustejovsky"
+output: html_document
+---
+
+```{r setup, echo=FALSE}
+library(reshape2)
+library(plyr)
+library(cluster)
+ILHC <- read.csv("ILHC Judging.csv")
+
+ILHC_couples <- dcast(ILHC, Judge + Judge.Nat. + Score + Placement + Contest ~ Role, value.var = "Contestant")
+
+initials <- function(names) sapply(names, function(name) paste(sapply(strsplit(name, " ")[[1]], substr, start=1, stop=1), collapse=""))
+ILHC_couples$couple <- with(ILHC_couples, paste(initials(Follower), initials(Leader), sep = "-"))
+
+lastname <- function(names) sapply(names, function(name) rev(strsplit(name, " ")[[1]])[1])
+ILHC_couples$Judge_last <- with(ILHC_couples, paste(substr(initials(levels(Judge)), 1, 1), lastname(levels(Judge)), sep = ".")[Judge])
+
+dendro <- function(dat) {
+  rankings <- acast(dat, Judge_last ~ Contest + couple, value.var = "Score")
+  plot(as.dendrogram(agnes(rankings)))
+  title(main = as.character(unique(dat$Contest)))
+}
+
+
+```
+
+## Hierarchical agglomerative clustering
+
+Last night on Facebook I suggested applying cluster analysis techniques to describe patterns in the judges' rankings from the contests at ILHC. John Holmstrom called my bluff, so here's a first stab at doing so. I use hierarchical, agglomerative clustering and try out a couple of different methods for judging dissimilarity between clusters. This produces a tree diagram (called a dendrogram) that shows how similar the judges scores are to each other. At each level of the dendrogram (from bottom to top), the two most similar clusters are combined ("agglomerated"). More similar judges will therefore be grouped together at the lower level of the hierarchy. If you draw a horizontal line at a given level of the dendrogram, judges who are connected below the line are in the same cluster, while judges who are not connected are in different clusters. 
+
+Following Holmstrom's lead, I'll start by combining the data from the invitational J&J, invitational strictly, pro classic, and pro showcase. The same set of nine judges scored all four of these contests. Here's the dendrogram, based on a "furthest neighbor" dissimilarity method:
+```{r, echo = FALSE}
+all9 <- droplevels(subset(ILHC_couples, Contest %in% c("Inv. J&J","Inv. Strictly", "Pro Classic", "Pro Showcase")))
+all9_clus <- agnes(acast(all9, Judge ~ Contest + couple, value.var = "Score"), method = "complete")
+pltree(all9_clus,        
+       xlab = "", ylab = "", sub = "",
+       main = "Invitational J&J, Invitational Strictly, Pro Classic, Pro Showcase \n Nearest neighbor clustering")
+
+```
+
+As John noted, Andy and Nalla scored the contests very similarly, as did Helena and Kenneth, as did Lennart and Steven. Falty seemed to have had the most distinctive scores, least similar to the other judges. If you were to classify the nine judges into just three groups, Casey and Valerie would be together, Falty would be by himself, and the six remaining judges would form a single group.
+
+I should note that these clusters are a bit sensitive to the algorithm used to form clusters. Below are the dendrograms based on "nearest neighbor" and the mean score methods:
+
+```{r, fig.width = 4, echo=FALSE}
+pltree(agnes(acast(all9, Judge ~ Contest + couple, value.var = "Score"), method = "single"), 
+       xlab = "", ylab = "", sub = "",
+       main = "Nearest neighbor clustering")
+pltree(agnes(acast(all9, Judge ~ Contest + couple, value.var = "Score"), method = "average"), 
+       xlab = "", ylab = "", sub = "",
+       main = "Average score clustering")
+```
+
+The Andy-Nalla and Helena-Kenneth pairings are apparent with these methods too, though Lennart ends up getting grouped closer to the other Swedes. Falty remains distinctive with the average score method, though Casey keeps him company based on nearest neighbors. 
+
+There are a bunch of other clustering methods out there, including many that are based on partitioning the group into smaller sub-groups (rather than agglomerating groups from individuals or sub-groups). It'd be interesting to try these out too, though I'll save that for another day.
+
+## Dealing with ranked data
+
+An interesting feature of these data is that they take the form of rankings rather than numerical scores.
